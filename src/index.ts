@@ -1,13 +1,13 @@
+import {CacheStorage} from './core/cache-storage';
+import {Context, ContextOptions} from './core/context';
+import {FastModeCloner} from './core/fast-mode-cloner';
+import {IframeStorage} from './core/iframe-storage';
 import {Bounds, parseBounds, parseDocumentSize} from './css/layout/bounds';
 import {COLORS, isTransparent, parseColor} from './css/types/color';
 import {CloneConfigurations, CloneOptions, DocumentCloner, WindowOptions} from './dom/document-cloner';
 import {isBodyElement, isHTMLElement, parseTree} from './dom/node-parser';
-import {CacheStorage} from './core/cache-storage';
 import {CanvasRenderer, RenderConfigurations, RenderOptions} from './render/canvas/canvas-renderer';
 import {ForeignObjectRenderer} from './render/canvas/foreignobject-renderer';
-import {IframeStorage} from './core/iframe-storage';
-import {FastModeCloner} from './core/fast-mode-cloner';
-import {Context, ContextOptions} from './core/context';
 
 export type Options = CloneOptions &
     WindowOptions &
@@ -105,7 +105,13 @@ const renderElement = async (element: HTMLElement, opts: Partial<Options>): Prom
 
             const containerWindow = cachedIframe.iframe.contentWindow;
 
-            const fastClone = new FastModeCloner(documentCloner, element, containerWindow, opts.replaceSelector);
+            const fastClone = new FastModeCloner(
+                documentCloner,
+                context,
+                element,
+                containerWindow,
+                opts.replaceSelector
+            );
 
             const cloneResult = await fastClone.clone();
 
@@ -204,8 +210,8 @@ const parseBackgroundColor = (context: Context, element: HTMLElement, background
         typeof backgroundColorOverride === 'string'
             ? parseColor(context, backgroundColorOverride)
             : backgroundColorOverride === null
-                ? COLORS.TRANSPARENT
-                : 0xffffffff;
+            ? COLORS.TRANSPARENT
+            : 0xffffffff;
 
     return element === ownerDocument.documentElement
         ? isTransparent(documentBackgroundColor)
