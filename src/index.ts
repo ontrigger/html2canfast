@@ -5,6 +5,8 @@ import {isBodyElement, isHTMLElement, parseTree} from './dom/node-parser';
 import {CacheStorage} from './core/cache-storage';
 import {CanvasRenderer, RenderConfigurations, RenderOptions} from './render/canvas/canvas-renderer';
 import {ForeignObjectRenderer} from './render/canvas/foreignobject-renderer';
+import {IframeStorage} from './core/iframe-storage';
+import {FastModeCloner} from './core/fast-mode-cloner';
 import {Context, ContextOptions} from './core/context';
 
 export type Options = CloneOptions &
@@ -52,6 +54,8 @@ const renderElement = async (element: HTMLElement, opts: Partial<Options>): Prom
     const contextOptions = {
         logging: opts.logging ?? true,
         cache: opts.cache,
+        renderName: opts.renderName,
+        replaceSelector: opts.replaceSelector,
         ...resourceOptions
     };
 
@@ -88,12 +92,46 @@ const renderElement = async (element: HTMLElement, opts: Partial<Options>): Prom
     );
 
     const documentCloner = new DocumentCloner(context, element, cloneOptions);
-    const clonedElement = documentCloner.clonedReferenceElement;
+
+    let clonedElement: HTMLElement | undefined;
+
+    let container!: HTMLIFrameElement;
+
+    if (opts.replaceSelector && opts.renderName) {
+        const cachedIframe = IframeStorage.getIframe(opts.renderName);
+
+        if (cachedIframe && cachedIframe.iframe.contentWindow !== null) {
+            container = cachedIframe.iframe;
+
+            const containerWindow = cachedIframe.iframe.contentWindow;
+
+            const fastClone = new FastModeCloner(documentCloner, element, containerWindow, opts.replaceSelector);
+
+            const cloneResult = await fastClone.clone();
+
+            if (!cloneResult) {
+                throw new Error('An Error occured, trying to fast clone!');
+            }
+
+            clonedElement = cloneResult.clonedElement;
+        } else {
+            documentCloner.cloneDocument();
+
+            clonedElement = documentCloner.clonedReferenceElement;
+
+            container = await documentCloner.toIFrame(ownerDocument, windowBounds);
+        }
+    } else {
+        documentCloner.cloneDocument();
+
+        clonedElement = documentCloner.clonedReferenceElement;
+
+        container = await documentCloner.toIFrame(ownerDocument, windowBounds);
+    }
+
     if (!clonedElement) {
         return Promise.reject(`Unable to find element in cloned iframe`);
     }
-
-    const container = await documentCloner.toIFrame(ownerDocument, windowBounds);
 
     const {width, height, left, top} =
         isBodyElement(clonedElement) || isHTMLElement(clonedElement)
@@ -144,6 +182,10 @@ const renderElement = async (element: HTMLElement, opts: Partial<Options>): Prom
         }
     }
 
+    if (!!opts.renderName) {
+        IframeStorage.saveIframe(opts.renderName, container);
+    }
+
     context.logger.debug(`Finished rendering`);
     return canvas;
 };
@@ -162,8 +204,8 @@ const parseBackgroundColor = (context: Context, element: HTMLElement, background
         typeof backgroundColorOverride === 'string'
             ? parseColor(context, backgroundColorOverride)
             : backgroundColorOverride === null
-            ? COLORS.TRANSPARENT
-            : 0xffffffff;
+                ? COLORS.TRANSPARENT
+                : 0xffffffff;
 
     return element === ownerDocument.documentElement
         ? isTransparent(documentBackgroundColor)

@@ -29,6 +29,8 @@ export interface CloneOptions {
     ignoreElements?: (element: Element) => boolean;
     onclone?: (document: Document, element: HTMLElement) => void;
     allowTaint?: boolean;
+    renderName?: string;
+    replaceSelector?: string;
 }
 
 export interface WindowOptions {
@@ -49,7 +51,7 @@ export class DocumentCloner {
     private readonly scrolledElements: [Element, number, number][];
     private readonly referenceElement: HTMLElement;
     clonedReferenceElement?: HTMLElement;
-    private readonly documentElement: HTMLElement;
+    private documentElement!: HTMLElement;
     private readonly counters: CounterState;
     private quoteDepth: number;
 
@@ -65,6 +67,10 @@ export class DocumentCloner {
         if (!element.ownerDocument) {
             throw new Error('Cloned element does not have an owner document');
         }
+    }
+
+    cloneDocument(): void {
+        const element = this.referenceElement;
 
         this.documentElement = this.cloneNode(element.ownerDocument.documentElement, false) as HTMLElement;
     }
